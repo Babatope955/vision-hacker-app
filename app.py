@@ -1,68 +1,67 @@
 import streamlit as st
-import openai
+from openai import OpenAI
 import requests
 from serpapi import GoogleSearch
 
-# PAGE CONFIG
-st.set_page_config(page_title="Vision Hacker IDEAL Model", layout="centered")
+# Set up API keys
+OPENAI_KEY = st.secrets["OPENAI_KEY"]
+SERPAPI_KEY = st.secrets["SERPAPI_KEY"]
+
+client = OpenAI(api_key=OPENAI_KEY)
+
+# Streamlit UI
+st.set_page_config(page_title="Vision Hacker", layout="centered")
 st.title("🔍 Vision Hacker IDEAL Model")
+st.write("Enter a company, influencer, or individual you'd like to analyze.")
 
-# INPUTS
-st.write("Enter a public figure, company or brand. This tool will analyze gaps and opportunities using the IDEAL model.")
-query = st.text_input("Who or what do you want to analyze?")
+query = st.text_input("Who/What would you like to analyze?")
 
-openai_api = st.secrets["OPENAI_KEY"] if "OPENAI_KEY" in st.secrets else st.text_input("Enter your OpenAI API Key", type="password")
-serpapi_key = st.secrets["SERPAPI_KEY"] if "SERPAPI_KEY" in st.secrets else st.text_input("Enter your SerpAPI Key", type="password")
+if st.button("Analyze"):
+    if not query:
+        st.warning("Please enter a valid name or company.")
+    else:
+        with st.spinner("Running analysis..."):
 
-# RUN ANALYSIS
-if st.button("Run IDEAL Analysis") and query and openai_api and serpapi_key:
-    st.info("Analyzing... Please wait ⏳")
+            # STEP 1: Get Google search summary
+            params = {
+                "q": query,
+                "api_key": SERPAPI_KEY,
+                "engine": "google",
+                "num": 5
+            }
+            search = GoogleSearch(params)
+            results = search.get_dict()
 
-    # STEP 1 — GET REAL-TIME DATA FROM SERPAPI
-    params = {
-        "engine": "google",
-        "q": query,
-        "api_key": serpapi_key,
-        "num": 10
-    }
-    search = GoogleSearch(params)
-    results = search.get_dict()
-    organic_results = results.get("organic_results", [])
-    
-    snippets = [item.get("snippet", "") for item in organic_results]
-    combined_text = " ".join(snippets)
+            organic_results = results.get("organic_results", [])
+            summary = "\n\n".join([res.get("snippet", "") for res in organic_results])
 
-    # STEP 2 — RUN OPENAI ANALYSIS USING IDEAL FRAMEWORK
-    prompt = f"""
-    You are a Vision Hacker. Use the IDEAL model to analyze the following person or company based on this info:
-    
-    [DATA]: {combined_text}
+            # STEP 2: Ask OpenAI for analysis and solutions
+            prompt = f"""
+You are a visionary business analyst. Here's a summary about {query}:
 
-    IDEAL stands for:
-    I - Identify core mission and current position.
-    D - Detect opportunity gaps and hidden weaknesses.
-    E - Evaluate external perception and digital presence.
-    A - Align new creative strategies to their values.
-    L - Launch actionable steps or innovation suggestions.
+{summary}
 
-    Give the analysis in a simple, smart way.
-    """
+Based on this, identify:
+1. Current strengths
+2. Hidden or ignored weaknesses
+3. Areas of opportunity
+4. One disruptive solution to transform their results
+5. A possible role I can create to provide this value
 
-    openai.api_key = openai_api
-    response = openai.ChatCompletion.create(
-        model="gpt-4",
-        messages=[
-            {"role": "system", "content": "You are an expert strategist and brand analyst."},
-            {"role": "user", "content": prompt}
-        ],
-        temperature=0.7,
-        max_tokens=800
-    )
+Use simple language. Keep it actionable.
+"""
 
-    output = response["choices"][0]["message"]["content"]
-    st.success("✅ IDEAL Analysis Complete")
-    st.markdown(output)
+            response = client.chat.completions.create(
+                model="gpt-4",
+                messages=[
+                    {"role": "system", "content": "You are a strategic visionary and solution hacker."},
+                    {"role": "user", "content": prompt}
+                ],
+                max_tokens=1000
+            )
 
-    # OPTIONAL DOWNLOAD
-    st.download_button("📄 Download Report", output, file_name=f"{query}_IDEAL_analysis.txt")
+            result = response.choices[0].message.content
 
+            # Display result
+            st.subheader("📊 Vision Hacker Analysis")
+            st.markdown(result)
