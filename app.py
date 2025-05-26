@@ -1,65 +1,90 @@
 import streamlit as st
+from serpapi import GoogleSearch
+import openai
 from fpdf import FPDF
-import base64
+import datetime
 
-st.set_page_config(page_title="Vision Hacker", layout="centered")
+# Load API keys from secrets
+openai.api_key = st.secrets["OPENAI_API_KEY"]
+SERPAPI_API_KEY = st.secrets["SERPAPI_API_KEY"]
 
-st.title("🔍 Vision Hacker - IDEAL Model Tool")
-query = st.text_input("Enter a name, brand or company to analyze")
+def serpapi_search(query):
+    params = {
+        "engine": "google",
+        "q": query,
+        "api_key": SERPAPI_API_KEY,
+        "num": 5
+    }
+    search = GoogleSearch(params)
+    results = search.get_dict()
+    snippets = []
+    if "organic_results" in results:
+        for result in results["organic_results"]:
+            title = result.get("title", "")
+            snippet = result.get("snippet", "")
+            link = result.get("link", "")
+            combined = f"{title}\n{snippet}\n{link}"
+            snippets.append(combined)
+    return "\n\n".join(snippets)
 
-# FAKE analysis - for demo; replace this with real logic later
-def run_fake_analysis(query):
-    return f"""
-    • {query} has a strong online presence but lacks consistent messaging.
-    • There’s untapped potential in connecting with younger audiences.
-    • SEO performance is below industry average.
-    • Content engagement could increase with more storytelling and brand consistency.
-    """
+def openai_analyze(text):
+    system_prompt = (
+        "You are a business analyst. Analyze the following information about a company or person. "
+        "Identify pain points, gaps, opportunities, and suggest tailored solutions."
+    )
+    response = openai.ChatCompletion.create(
+        model="gpt-4",
+        messages=[
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": text}
+        ],
+        max_tokens=800,
+        temperature=0.7,
+    )
+    return response.choices[0].message.content.strip()
 
-def generate_pdf_report(query, analysis):
+def create_pdf_report(title, analysis_text):
     pdf = FPDF()
     pdf.add_page()
     pdf.set_font("Arial", "B", 16)
-    pdf.cell(200, 10, f"Vision Hacker Report: {query}", ln=True, align='C')
-    pdf.set_font("Arial", "", 12)
+    pdf.cell(0, 10, f"IDEAL Model Analysis Report", ln=True, align="C")
     pdf.ln(10)
-    pdf.multi_cell(0, 10, analysis)
-    pdf_output = f"{query}_report.pdf"
-    pdf.output(pdf_output)
-    return pdf_output
+    pdf.set_font("Arial", "B", 14)
+    pdf.cell(0, 10, f"Subject: {title}", ln=True)
+    pdf.ln(10)
+    pdf.set_font("Arial", "", 12)
+    pdf.multi_cell(0, 10, analysis_text)
+    filename = f"IDEAL_Report_{title.replace(' ', '_')}_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf"
+    pdf.output(filename)
+    return filename
 
-def generate_email_pitch(query, analysis):
-    return f"""Subject: Opportunity to Strengthen {query}'s Brand
+def main():
+    st.title("🚀 IDEAL Model Business Analyzer")
+    st.write("Enter a company or person name to analyze their public data and get tailored solutions.")
 
-Hi {query},
+    query = st.text_input("Enter company or person name:")
 
-I recently reviewed your digital presence and identified some improvement areas:
+    if st.button("Analyze") and query:
+        with st.spinner("Fetching data from Google..."):
+            scraped_text = serpapi_search(query)
+        
+        if not scraped_text:
+            st.warning("No data found. Try a different name or keyword.")
+            return
+        
+        st.subheader("🔍 Raw Data Snippets from Google Search:")
+        st.write(scraped_text)
 
-{analysis}
-
-Would you be open to a short conversation about solutions? I’d love to share how I can help.
-
-Best regards,  
-[Your Name]  
-Vision Hacker  
-"""
-
-if st.button("🚀 Analyze"):
-    if not query:
-        st.warning("Please enter a name or brand to analyze.")
-    else:
-        analysis = run_fake_analysis(query)
-        st.subheader("🧠 Analysis Summary")
+        with st.spinner("Analyzing data with OpenAI GPT..."):
+            analysis = openai_analyze(scraped_text)
+        
+        st.subheader("🧠 IDEAL Model Analysis:")
         st.write(analysis)
 
-        # PDF
-        pdf_file = generate_pdf_report(query, analysis)
-        with open(pdf_file, "rb") as f:
-            b64 = base64.b64encode(f.read()).decode()
-            href = f'<a href="data:application/pdf;base64,{b64}" download="{pdf_file}">📄 Download PDF Report</a>'
-            st.markdown(href, unsafe_allow_html=True)
+        if st.button("Generate PDF Report"):
+            pdf_file = create_pdf_report(query, analysis)
+            with open(pdf_file, "rb") as f:
+                st.download_button(label="Download Report PDF", data=f, file_name=pdf_file, mime="application/pdf")
 
-        # Email
-        st.subheader("✉️ Suggested Email Pitch")
-        email = generate_email_pitch(query, analysis)
-        st.code(email)
+if __name__ == "__main__":
+    main()
