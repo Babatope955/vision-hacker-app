@@ -51,17 +51,19 @@ Based on this, identify:
 Use simple language. Keep it actionable.
 """
 
-            response = client.chat.completions.create(
-                model="gpt-4",
-                messages=[
-                    {"role": "system", "content": "You are a strategic visionary and solution hacker."},
-                    {"role": "user", "content": prompt}
-                ],
-                max_tokens=1000
-            )
+            try:
+                response = client.chat.completions.create(
+                    model="gpt-4-turbo",
+                    messages=[
+                        {"role": "system", "content": "You are a strategic visionary and solution hacker."},
+                        {"role": "user", "content": prompt}
+                    ],
+                    max_tokens=1000
+                )
 
-            result = response.choices[0].message.content
+                result = response.choices[0].message.content
+                st.subheader("📊 Vision Hacker Analysis")
+                st.markdown(result)
 
-            # Display result
-            st.subheader("📊 Vision Hacker Analysis")
-            st.markdown(result)
+            except Exception as e:
+                st.error(f"Error from OpenAI: {str(e)}")
