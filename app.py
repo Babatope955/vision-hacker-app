@@ -1,69 +1,60 @@
 import streamlit as st
-from openai import OpenAI
 import requests
-from serpapi import GoogleSearch
+import os
 
-# Set up API keys
-OPENAI_KEY = st.secrets["OPENAI_KEY"]
+# Load API key from Streamlit Secrets
 SERPAPI_KEY = st.secrets["SERPAPI_KEY"]
 
-client = OpenAI(api_key=OPENAI_KEY)
+# Search function using SerpAPI
+def search_with_serpapi(query):
+    url = "https://serpapi.com/search.json"
+    params = {
+        "q": query,
+        "engine": "google",
+        "api_key": SERPAPI_KEY
+    }
+    response = requests.get(url, params=params)
+    return response.json()
 
-# Streamlit UI
-st.set_page_config(page_title="Vision Hacker", layout="centered")
-st.title("🔍 Vision Hacker IDEAL Model")
-st.write("Enter a company, influencer, or individual you'd like to analyze.")
+# Analysis function
+def analyze_results(results):
+    if "organic_results" not in results:
+        return "No results found or API error."
 
-query = st.text_input("Who/What would you like to analyze?")
+    insights = []
+
+    titles = [res.get("title", "") for res in results["organic_results"]]
+    snippets = [res.get("snippet", "") for res in results["organic_results"]]
+
+    # Basic keyword checks
+    if not any("vision" in s.lower() for s in snippets):
+        insights.append("⚠️ No clear vision or mission found in public results.")
+    if not any("contact" in s.lower() or "email" in s.lower() for s in snippets):
+        insights.append("📭 No contact information is visible — may reduce trust.")
+    if any("controversy" in s.lower() or "scandal" in s.lower() for s in snippets):
+        insights.append("🚨 Potential reputation risks found.")
+
+    if not insights:
+        insights.append("✅ Everything looks generally clean and structured.")
+
+    return "\n".join(insights)
+
+# Streamlit app UI
+st.title("🔎 Vision Hacker Lite")
+query = st.text_input("Enter name of a company, influencer, or product to analyze:")
 
 if st.button("Analyze"):
-    if not query:
-        st.warning("Please enter a valid name or company.")
-    else:
-        with st.spinner("Running analysis..."):
+    with st.spinner("Searching..."):
+        search_data = search_with_serpapi(query)
+        st.subheader("🔍 Top Search Results")
+        if "organic_results" in search_data:
+            for i, res in enumerate(search_data["organic_results"][:5]):
+                st.markdown(f"**{i+1}. {res.get('title', '')}**")
+                st.write(res.get("snippet", ""))
+                st.write(res.get("link", ""))
+        else:
+            st.error("No results found or SerpAPI quota exceeded.")
 
-            # STEP 1: Get Google search summary
-            params = {
-                "q": query,
-                "api_key": SERPAPI_KEY,
-                "engine": "google",
-                "num": 5
-            }
-            search = GoogleSearch(params)
-            results = search.get_dict()
-
-            organic_results = results.get("organic_results", [])
-            summary = "\n\n".join([res.get("snippet", "") for res in organic_results])
-
-            # STEP 2: Ask OpenAI for analysis and solutions
-            prompt = f"""
-You are a visionary business analyst. Here's a summary about {query}:
-
-{summary}
-
-Based on this, identify:
-1. Current strengths
-2. Hidden or ignored weaknesses
-3. Areas of opportunity
-4. One disruptive solution to transform their results
-5. A possible role I can create to provide this value
-
-Use simple language. Keep it actionable.
-"""
-
-            try:
-                response = client.chat.completions.create(
-                    model="gpt-3.5-turbo",
-                    messages=[
-                        {"role": "system", "content": "You are a strategic visionary and solution hacker."},
-                        {"role": "user", "content": prompt}
-                    ],
-                    max_tokens=1000
-                )
-
-                result = response.choices[0].message.content
-                st.subheader("📊 Vision Hacker Analysis")
-                st.markdown(result)
-
-            except Exception as e:
-                st.error(f"Error from OpenAI: {str(e)}")
+        st.subheader("🧠 Auto Insights")
+        analysis = analyze_results(search_data)
+        st.write(analysis)
