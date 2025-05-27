@@ -6,6 +6,7 @@ import requests
 from datetime import datetime
 from pathlib import Path
 from fpdf import FPDF
+from openai import OpenAI
 
 # -----------------------------
 # Set up Streamlit secrets
@@ -14,6 +15,8 @@ SERPAPI_API_KEY = st.secrets["SERPAPI_API_KEY"]
 NEWSDATA_API_KEY = st.secrets["NEWSDATA_API_KEY"]
 GNEWS_API_KEY = st.secrets["GNEWS_API_KEY"]
 PHANTOMBUSTER_API_KEY = st.secrets["PHANTOMBUSTER_API_KEY"]
+OPENAI_API_KEY = st.secrets["OPENAI_API_KEY"]
+client = OpenAI(api_key=OPENAI_API_KEY)
 
 # -----------------------------
 # Function: Search company info using SerpAPI
@@ -45,9 +48,44 @@ def get_news_gnews(company_name):
     return response.json().get("articles", [])
 
 # -----------------------------
+# Function: Get tweets using SerpApi Twitter engine
+# -----------------------------
+def get_tweets(company_name):
+    params = {
+        "engine": "twitter",
+        "q": company_name,
+        "api_key": SERPAPI_API_KEY
+    }
+    search = GoogleSearch(params)
+    results = search.get_dict()
+    tweets = results.get("tweets", [])
+    tweet_texts = [tweet.get("text", "") for tweet in tweets[:5]]
+    return tweet_texts
+
+# -----------------------------
+# Function: Analyze tweets with OpenAI
+# -----------------------------
+def analyze_sentiment_with_openai(company_name, tweets):
+    if not tweets:
+        return "No tweet data available for sentiment analysis."
+    prompt = f"""
+    Analyze the public sentiment about {company_name} based on the following tweets:
+
+    {'\n'.join(tweets)}
+
+    Summarize the general tone, any common praises or complaints, and how the public perceives this company.
+    """
+    response = client.chat.completions.create(
+        model="gpt-3.5-turbo",
+        messages=[{"role": "user", "content": prompt}],
+        max_tokens=300
+    )
+    return response.choices[0].message.content.strip()
+
+# -----------------------------
 # Function: Generate PDF Report
 # -----------------------------
-def generate_pdf_report(company_name, google_results, newsdata_articles, gnews_articles):
+def generate_pdf_report(company_name, google_results, newsdata_articles, gnews_articles, sentiment):
     date_str = datetime.now().strftime("%Y-%m-%d")
     filename = f"{company_name.replace(' ', '_')}_{date_str}.pdf"
     filepath = Path("reports") / filename
@@ -94,21 +132,12 @@ def generate_pdf_report(company_name, google_results, newsdata_articles, gnews_a
     else:
         pdf.cell(200, 10, txt="No news articles found.", ln=True)
 
-    # Mock diagnosis
+    # Sentiment Analysis
     pdf.ln(5)
     pdf.set_font("Arial", 'B', 14)
-    pdf.cell(200, 10, txt="Pain Points (Mock AI Diagnosis):", ln=True)
+    pdf.cell(200, 10, txt="Social Media Sentiment:", ln=True)
     pdf.set_font("Arial", '', 12)
-    pdf.cell(200, 10, txt="- High public exposure may demand better PR handling.", ln=True)
-    pdf.cell(200, 10, txt="- Competitor pressure in regional markets.", ln=True)
-
-    # Suggestions
-    pdf.ln(5)
-    pdf.set_font("Arial", 'B', 14)
-    pdf.cell(200, 10, txt="Suggested Actions:", ln=True)
-    pdf.set_font("Arial", '', 12)
-    pdf.cell(200, 10, txt="- Invest in localized branding and influencer partnerships.", ln=True)
-    pdf.cell(200, 10, txt="- Boost digital engagement through targeted campaigns.", ln=True)
+    pdf.multi_cell(0, 10, sentiment)
 
     pdf.output(str(filepath))
     return filepath
@@ -125,9 +154,11 @@ if st.button("Run Analysis") and company:
             google_data = search_google(company)
             news_data = get_news_newsdata(company)
             gnews_data = get_news_gnews(company)
-            report_path = generate_pdf_report(company, google_data, news_data, gnews_data)
+            tweets = get_tweets(company)
+            sentiment = analyze_sentiment_with_openai(company, tweets)
+            report_path = generate_pdf_report(company, google_data, news_data, gnews_data, sentiment)
 
-            st.success(f"Report generated!")
+            st.success("Report generated!")
             with open(report_path, "rb") as f:
                 st.download_button("Download PDF Report", f, file_name=report_path.name)
         except Exception as e:
