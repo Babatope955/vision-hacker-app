@@ -7,6 +7,7 @@ from datetime import datetime
 from pathlib import Path
 from fpdf import FPDF
 from openai import OpenAI
+import unicodedata
 
 # -----------------------------
 # Set up Streamlit secrets
@@ -17,6 +18,14 @@ GNEWS_API_KEY = st.secrets["GNEWS_API_KEY"]
 PHANTOMBUSTER_API_KEY = st.secrets["PHANTOMBUSTER_API_KEY"]
 OPENAI_API_KEY = st.secrets["OPENAI_API_KEY"]
 client = OpenAI(api_key=OPENAI_API_KEY)
+
+# -----------------------------
+# Utility function to clean up non-latin characters
+# -----------------------------
+def sanitize_text(text):
+    if not text:
+        return ""
+    return unicodedata.normalize('NFKD', text).encode('latin-1', 'ignore').decode('latin-1')
 
 # -----------------------------
 # Function: Search company info using SerpAPI
@@ -94,50 +103,50 @@ def generate_pdf_report(company_name, google_results, newsdata_articles, gnews_a
     pdf = FPDF()
     pdf.add_page()
     pdf.set_font("Arial", 'B', 16)
-    pdf.cell(200, 10, txt=f"Vision Hacker Report on {company_name}", ln=True, align='C')
+    pdf.cell(200, 10, txt=sanitize_text(f"Vision Hacker Report on {company_name}"), ln=True, align='C')
 
     pdf.set_font("Arial", '', 12)
     pdf.ln(10)
 
     # Overview from Google Results
     pdf.set_font("Arial", 'B', 14)
-    pdf.cell(200, 10, txt="Overview:", ln=True)
+    pdf.cell(200, 10, txt=sanitize_text("Overview:"), ln=True)
     pdf.set_font("Arial", '', 12)
     if google_results:
         snippet = google_results[0].get("snippet", "No overview found.")
-        pdf.multi_cell(0, 10, snippet)
+        pdf.multi_cell(0, 10, sanitize_text(snippet))
         pdf.ln(5)
     else:
-        pdf.multi_cell(0, 10, "No search data available.")
+        pdf.multi_cell(0, 10, sanitize_text("No search data available."))
 
     # News from NewsData
     pdf.set_font("Arial", 'B', 14)
-    pdf.cell(200, 10, txt="Recent News from NewsData.io:", ln=True)
+    pdf.cell(200, 10, txt=sanitize_text("Recent News from NewsData.io:"), ln=True)
     pdf.set_font("Arial", '', 12)
     if newsdata_articles:
         for article in newsdata_articles[:3]:
-            pdf.multi_cell(0, 10, f"- {article['title']} ({article['link']})")
+            pdf.multi_cell(0, 10, sanitize_text(f"- {article['title']} ({article['link']})"))
             pdf.ln(2)
     else:
-        pdf.cell(200, 10, txt="No news articles found.", ln=True)
+        pdf.cell(200, 10, txt=sanitize_text("No news articles found."), ln=True)
 
     pdf.ln(5)
     pdf.set_font("Arial", 'B', 14)
-    pdf.cell(200, 10, txt="Recent News from GNews:", ln=True)
+    pdf.cell(200, 10, txt=sanitize_text("Recent News from GNews:"), ln=True)
     pdf.set_font("Arial", '', 12)
     if gnews_articles:
         for article in gnews_articles[:3]:
-            pdf.multi_cell(0, 10, f"- {article['title']} ({article['url']})")
+            pdf.multi_cell(0, 10, sanitize_text(f"- {article['title']} ({article['url']})"))
             pdf.ln(2)
     else:
-        pdf.cell(200, 10, txt="No news articles found.", ln=True)
+        pdf.cell(200, 10, txt=sanitize_text("No news articles found."), ln=True)
 
     # Sentiment Analysis
     pdf.ln(5)
     pdf.set_font("Arial", 'B', 14)
-    pdf.cell(200, 10, txt="Social Media Sentiment:", ln=True)
+    pdf.cell(200, 10, txt=sanitize_text("Social Media Sentiment:"), ln=True)
     pdf.set_font("Arial", '', 12)
-    pdf.multi_cell(0, 10, sentiment)
+    pdf.multi_cell(0, 10, sanitize_text(sentiment))
 
     pdf.output(str(filepath))
     return filepath
