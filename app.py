@@ -1,19 +1,15 @@
 import streamlit as st
-import openai
-import os
 from openai import OpenAI
 from serpapi import GoogleSearch
+import os
 
-# Load API keys from Streamlit secrets or environment variables
-OPENAI_API_KEY = st.secrets.get("OPENAI_API_KEY", os.getenv("OPENAI_API_KEY"))
-SERPAPI_API_KEY = st.secrets.get("SERPAPI_API_KEY", os.getenv("SERPAPI_API_KEY"))
+# Load keys from environment or Streamlit secrets
+OPENAI_API_KEY = st.secrets.get("OPENAI_API_KEY") or os.getenv("OPENAI_API_KEY")
+SERPAPI_API_KEY = st.secrets.get("SERPAPI_API_KEY") or os.getenv("SERPAPI_API_KEY")
 
-# Set OpenAI key
 client = OpenAI(api_key=OPENAI_API_KEY)
 
 st.title("🔍 Vision Hacker: The IDEAL Model Tool")
-st.write("AI-powered tool to audit and pitch business solutions using the IDEAL framework.")
-
 company_name = st.text_input("Enter a Company Name (e.g., Flutterwave Nigeria)")
 
 if st.button("Analyze"):
@@ -21,18 +17,18 @@ if st.button("Analyze"):
         st.warning("Please enter a company name.")
     else:
         with st.spinner("Gathering insights..."):
-
-            # 🔎 PHASE 1: IDENTIFY
+            # SERPAPI SEARCH
             params = {
                 "engine": "google",
                 "q": company_name,
-                "api_key": SERPAPI_API_KEY
+                "api_key": SERPAPI_API_KEY,
+                "num": 5
             }
-
             search = GoogleSearch(params)
             results = search.get_dict()
             organic_results = results.get("organic_results", [])
-            top_content = "\n\n".join([res.get("snippet", "") for res in organic_results[:5]])
+            snippets = [res.get("snippet", "") for res in organic_results[:5]]
+            combined_snippets = "\n\n".join(snippets)
 
             prompt = f"""
             You are a business analyst using the IDEAL Model.
@@ -41,7 +37,7 @@ if st.button("Analyze"):
 
             Phase 1: IDENTIFY
             Based on this public content:
-            {top_content}
+            {combined_snippets}
 
             1. What does this company do?
             2. What is its current brand perception?
@@ -70,24 +66,17 @@ if st.button("Analyze"):
 
             try:
                 response = client.chat.completions.create(
-                    model="gpt-4-turbo",
+                    model="gpt-4",
                     messages=[{"role": "user", "content": prompt}],
                     max_tokens=1500
                 )
-            except openai.NotFoundError:
-                st.error("⚠️ GPT-4 not available. Using GPT-3.5-turbo instead.")
-                response = client.chat.completions.create(
-                    model="gpt-3.5-turbo",
-                    messages=[{"role": "user", "content": prompt}],
-                    max_tokens=1500
-                )
+            except Exception as e:
+                st.error(f"OpenAI API error: {e}")
+                st.stop()
 
             result_text = response.choices[0].message.content
             st.subheader("🧠 IDEAL Model Insights")
             st.write(result_text)
 
-            # Option to download result as PDF
-            with open("vision_report.txt", "w") as file:
-                file.write(result_text)
-            with open("vision_report.txt", "rb") as file:
-                st.download_button("📥 Download Report", file, file_name="IDEAL_Report.txt")
+            # Optional: download button
+            st.download_button("Download report as TXT", result_text, file_name="IDEAL_Report.txt")
