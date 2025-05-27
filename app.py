@@ -3,9 +3,9 @@ import streamlit as st
 from serpapi import GoogleSearch
 from newsdataapi import NewsDataApiClient
 import requests
-import json
 from datetime import datetime
 from pathlib import Path
+from fpdf import FPDF
 
 # -----------------------------
 # Set up Streamlit secrets
@@ -26,7 +26,7 @@ def search_google(company_name):
     }
     search = GoogleSearch(params)
     results = search.get_dict()
-    return results
+    return results.get("organic_results", [])
 
 # -----------------------------
 # Function: Get news using NewsData.io
@@ -45,42 +45,73 @@ def get_news_gnews(company_name):
     return response.json().get("articles", [])
 
 # -----------------------------
-# Function: Use PhantomBuster for social scraping
+# Function: Generate PDF Report
 # -----------------------------
-def get_phantom_data(company_name):
-    # You will need to set up a PhantomBuster Phantom and use its API endpoint
-    headers = {
-        "X-Phantombuster-Key-1": PHANTOMBUSTER_API_KEY,
-        "Content-Type": "application/json"
-    }
-    # Replace 'YOUR_AGENT_ID' with your actual Phantom ID
-    url = f"https://api.phantombuster.com/api/v2/agent/YOUR_AGENT_ID/launch"
-    data = {"arguments": {"search": company_name}}
-    response = requests.post(url, headers=headers, json=data)
-    return response.json()
-
-# -----------------------------
-# Function: Generate Report
-# -----------------------------
-def generate_report(company_name, search_results, news1, news2):
+def generate_pdf_report(company_name, google_results, newsdata_articles, gnews_articles):
     date_str = datetime.now().strftime("%Y-%m-%d")
-    report_path = Path("reports") / f"{company_name.replace(' ', '_')}_{date_str}.txt"
-    report_path.parent.mkdir(exist_ok=True)
+    filename = f"{company_name.replace(' ', '_')}_{date_str}.pdf"
+    filepath = Path("reports") / filename
+    filepath.parent.mkdir(parents=True, exist_ok=True)
 
-    with open(report_path, "w", encoding="utf-8") as f:
-        f.write(f"--- Report on {company_name} ---\n\n")
-        f.write("--- Google Search Results ---\n")
-        json.dump(search_results, f, indent=2)
+    pdf = FPDF()
+    pdf.add_page()
+    pdf.set_font("Arial", 'B', 16)
+    pdf.cell(200, 10, txt=f"Vision Hacker Report on {company_name}", ln=True, align='C')
 
-        f.write("\n--- News from NewsData ---\n")
-        for article in news1:
-            f.write(f"{article['title']} - {article['link']}\n")
+    pdf.set_font("Arial", '', 12)
+    pdf.ln(10)
 
-        f.write("\n--- News from GNews ---\n")
-        for article in news2:
-            f.write(f"{article['title']} - {article['url']}\n")
+    # Overview from Google Results
+    pdf.set_font("Arial", 'B', 14)
+    pdf.cell(200, 10, txt="📌 Overview:", ln=True)
+    pdf.set_font("Arial", '', 12)
+    if google_results:
+        snippet = google_results[0].get("snippet", "No overview found.")
+        pdf.multi_cell(0, 10, snippet)
+        pdf.ln(5)
+    else:
+        pdf.multi_cell(0, 10, "No search data available.")
 
-    return report_path
+    # News from NewsData
+    pdf.set_font("Arial", 'B', 14)
+    pdf.cell(200, 10, txt="📰 Recent News from NewsData.io:", ln=True)
+    pdf.set_font("Arial", '', 12)
+    if newsdata_articles:
+        for article in newsdata_articles[:3]:
+            pdf.multi_cell(0, 10, f"- {article['title']} ({article['link']})")
+            pdf.ln(2)
+    else:
+        pdf.cell(200, 10, txt="No news articles found.", ln=True)
+
+    pdf.ln(5)
+    pdf.set_font("Arial", 'B', 14)
+    pdf.cell(200, 10, txt="📰 Recent News from GNews:", ln=True)
+    pdf.set_font("Arial", '', 12)
+    if gnews_articles:
+        for article in gnews_articles[:3]:
+            pdf.multi_cell(0, 10, f"- {article['title']} ({article['url']})")
+            pdf.ln(2)
+    else:
+        pdf.cell(200, 10, txt="No news articles found.", ln=True)
+
+    # Mock diagnosis
+    pdf.ln(5)
+    pdf.set_font("Arial", 'B', 14)
+    pdf.cell(200, 10, txt="⚠️ Pain Points (Mock AI Diagnosis):", ln=True)
+    pdf.set_font("Arial", '', 12)
+    pdf.cell(200, 10, txt="- High public exposure may demand better PR handling.", ln=True)
+    pdf.cell(200, 10, txt="- Competitor pressure in regional markets.", ln=True)
+
+    # Suggestions
+    pdf.ln(5)
+    pdf.set_font("Arial", 'B', 14)
+    pdf.cell(200, 10, txt="💡 Suggested Actions:", ln=True)
+    pdf.set_font("Arial", '', 12)
+    pdf.cell(200, 10, txt="- Invest in localized branding and influencer partnerships.", ln=True)
+    pdf.cell(200, 10, txt="- Boost digital engagement through targeted campaigns.", ln=True)
+
+    pdf.output(str(filepath))
+    return filepath
 
 # -----------------------------
 # Streamlit UI
@@ -94,11 +125,10 @@ if st.button("Run Analysis") and company:
             google_data = search_google(company)
             news_data = get_news_newsdata(company)
             gnews_data = get_news_gnews(company)
-            # phantom_data = get_phantom_data(company)  # Optional if you've set up a Phantom
+            report_path = generate_pdf_report(company, google_data, news_data, gnews_data)
 
-            report = generate_report(company, google_data, news_data, gnews_data)
-            st.success(f"Report generated: {report.name}")
-            with open(report, "r", encoding="utf-8") as file:
-                st.download_button("Download Report", file, file_name=report.name)
+            st.success(f"Report generated!")
+            with open(report_path, "rb") as f:
+                st.download_button("📄 Download PDF Report", f, file_name=report_path.name)
         except Exception as e:
             st.error(f"An error occurred: {e}")
