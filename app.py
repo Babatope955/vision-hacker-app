@@ -1,90 +1,95 @@
 import streamlit as st
-from serpapi import GoogleSearch
 import openai
+import requests
 from fpdf import FPDF
 import datetime
 
-# Load API keys from secrets
-openai.api_key = st.secrets["OPENAI_API_KEY"]
+# --- CONFIG --- #
+openai.api_key = st.secrets["OPENAI_API_KEY"]  # set your key in Streamlit secrets or replace directly here
 SERPAPI_API_KEY = st.secrets["SERPAPI_API_KEY"]
 
-def serpapi_search(query):
+# --- FUNCTIONS --- #
+
+def serpapi_search(query, num=5):
+    """Search Google via SerpAPI and get snippets & links."""
+    url = "https://serpapi.com/search.json"
     params = {
-        "engine": "google",
         "q": query,
         "api_key": SERPAPI_API_KEY,
-        "num": 5
+        "num": num,
+        "hl": "en",
+        "gl": "us",
     }
-    search = GoogleSearch(params)
-    results = search.get_dict()
-    snippets = []
-    if "organic_results" in results:
-        for result in results["organic_results"]:
-            title = result.get("title", "")
-            snippet = result.get("snippet", "")
-            link = result.get("link", "")
-            combined = f"{title}\n{snippet}\n{link}"
-            snippets.append(combined)
-    return "\n\n".join(snippets)
+    res = requests.get(url, params=params).json()
+    results = []
+    if "organic_results" in res:
+        for r in res["organic_results"][:num]:
+            title = r.get("title", "")
+            snippet = r.get("snippet", "")
+            link = r.get("link", "")
+            results.append(f"{title}\n{snippet}\n{link}\n")
+    return "\n---\n".join(results)
 
-def openai_analyze(text):
-    system_prompt = (
-        "You are a business analyst. Analyze the following information about a company or person. "
-        "Identify pain points, gaps, opportunities, and suggest tailored solutions."
-    )
+def generate_analysis(text, query):
+    prompt = f"""
+You are an expert business analyst. Given the following information about {query}:
+
+{text}
+
+Please provide the analysis in the following structure:
+1. Identify: Summarize who/what this company/person is and what they do.
+2. Diagnose: What are their strengths, weaknesses, opportunities, and threats based on public info?
+3. Evaluate: How urgent or big are the opportunities or problems?
+4. Act: Suggest 3 actionable solutions or strategies to improve or capitalize on opportunities.
+5. Pitch: Draft a short personalized email pitch offering consulting services to help.
+
+Format the output clearly.
+"""
     response = openai.ChatCompletion.create(
         model="gpt-4",
         messages=[
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": text}
+            {"role":"system","content":"You are a helpful business analyst."},
+            {"role":"user","content":prompt}
         ],
-        max_tokens=800,
+        max_tokens=1000,
         temperature=0.7,
     )
-    return response.choices[0].message.content.strip()
+    return response.choices[0].message.content
 
-def create_pdf_report(title, analysis_text):
+def create_pdf(report_text, query):
     pdf = FPDF()
     pdf.add_page()
-    pdf.set_font("Arial", "B", 16)
-    pdf.cell(0, 10, f"IDEAL Model Analysis Report", ln=True, align="C")
+    pdf.set_font("Arial", size=12)
+    pdf.cell(0, 10, f"Business Analysis Report: {query}", ln=True, align="C")
+    pdf.cell(0, 10, f"Date: {datetime.datetime.now().strftime('%Y-%m-%d')}", ln=True, align="C")
     pdf.ln(10)
-    pdf.set_font("Arial", "B", 14)
-    pdf.cell(0, 10, f"Subject: {title}", ln=True)
-    pdf.ln(10)
-    pdf.set_font("Arial", "", 12)
-    pdf.multi_cell(0, 10, analysis_text)
-    filename = f"IDEAL_Report_{title.replace(' ', '_')}_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf"
-    pdf.output(filename)
-    return filename
+    for line in report_text.split('\n'):
+        pdf.multi_cell(0, 8, line)
+    pdf_file = f"{query.replace(' ', '_')}_analysis_report.pdf"
+    pdf.output(pdf_file)
+    return pdf_file
 
-def main():
-    st.title("🚀 IDEAL Model Business Analyzer")
-    st.write("Enter a company or person name to analyze their public data and get tailored solutions.")
+# --- STREAMLIT APP --- #
 
-    query = st.text_input("Enter company or person name:")
+st.title("Vision Hacker — Business AI Analyst")
 
-    if st.button("Analyze") and query:
-        with st.spinner("Fetching data from Google..."):
-            scraped_text = serpapi_search(query)
-        
-        if not scraped_text:
-            st.warning("No data found. Try a different name or keyword.")
-            return
-        
-        st.subheader("🔍 Raw Data Snippets from Google Search:")
-        st.write(scraped_text)
+query = st.text_input("Enter a company or person name (or website):")
 
-        with st.spinner("Analyzing data with OpenAI GPT..."):
-            analysis = openai_analyze(scraped_text)
-        
-        st.subheader("🧠 IDEAL Model Analysis:")
+if st.button("Analyze"):
+    if not query.strip():
+        st.error("Please enter a valid company or person name.")
+    else:
+        with st.spinner("Fetching public info from Google..."):
+            search_results = serpapi_search(query)
+        st.subheader("Raw Search Results")
+        st.text_area("", search_results, height=300)
+
+        with st.spinner("Generating AI analysis and pitch..."):
+            analysis = generate_analysis(search_results, query)
+        st.subheader("AI Analysis & Recommendations")
         st.write(analysis)
 
-        if st.button("Generate PDF Report"):
-            pdf_file = create_pdf_report(query, analysis)
-            with open(pdf_file, "rb") as f:
-                st.download_button(label="Download Report PDF", data=f, file_name=pdf_file, mime="application/pdf")
+        pdf_file = create_pdf(analysis, query)
+        with open(pdf_file, "rb") as f:
+            st.download_button(label="Download PDF Report", data=f, file_name=pdf_file, mime="application/pdf")
 
-if __name__ == "__main__":
-    main()
