@@ -87,6 +87,24 @@ def analyze_sentiment_with_openai(company_name, tweets):
     response = client.chat.completions.create(
         model="gpt-3.5-turbo",
         messages=[{"role": "user", "content": prompt}],
+        max_tokens=400
+    )
+    return response.choices[0].message.content.strip()
+
+# -----------------------------
+# Function: Summarize Google results with OpenAI
+# -----------------------------
+def summarize_overview_with_openai(company_name, google_results):
+    snippets = [res.get("snippet", "") for res in google_results[:5]]
+    combined = "\n".join(snippets)
+    prompt = f"""
+    Based on the following search result snippets, provide a concise but insightful overview of what {company_name} does, their core services, public identity, and any standout observations:
+
+    {combined}
+    """
+    response = client.chat.completions.create(
+        model="gpt-3.5-turbo",
+        messages=[{"role": "user", "content": prompt}],
         max_tokens=300
     )
     return response.choices[0].message.content.strip()
@@ -94,7 +112,7 @@ def analyze_sentiment_with_openai(company_name, tweets):
 # -----------------------------
 # Function: Generate PDF Report
 # -----------------------------
-def generate_pdf_report(company_name, google_results, newsdata_articles, gnews_articles, sentiment):
+def generate_pdf_report(company_name, overview, newsdata_articles, gnews_articles, sentiment):
     date_str = datetime.now().strftime("%Y-%m-%d")
     filename = f"{company_name.replace(' ', '_')}_{date_str}.pdf"
     filepath = Path("reports") / filename
@@ -108,18 +126,14 @@ def generate_pdf_report(company_name, google_results, newsdata_articles, gnews_a
     pdf.set_font("Arial", '', 12)
     pdf.ln(10)
 
-    # Overview from Google Results
+    # Overview from OpenAI summary
     pdf.set_font("Arial", 'B', 14)
     pdf.cell(200, 10, txt=sanitize_text("Overview:"), ln=True)
     pdf.set_font("Arial", '', 12)
-    if google_results:
-        snippet = google_results[0].get("snippet", "No overview found.")
-        pdf.multi_cell(0, 10, sanitize_text(snippet))
-        pdf.ln(5)
-    else:
-        pdf.multi_cell(0, 10, sanitize_text("No search data available."))
+    pdf.multi_cell(0, 10, sanitize_text(overview or "No meaningful overview available."))
 
     # News from NewsData
+    pdf.ln(5)
     pdf.set_font("Arial", 'B', 14)
     pdf.cell(200, 10, txt=sanitize_text("Recent News from NewsData.io:"), ln=True)
     pdf.set_font("Arial", '', 12)
@@ -165,7 +179,8 @@ if st.button("Run Analysis") and company:
             gnews_data = get_news_gnews(company)
             tweets = get_tweets(company)
             sentiment = analyze_sentiment_with_openai(company, tweets)
-            report_path = generate_pdf_report(company, google_data, news_data, gnews_data, sentiment)
+            overview = summarize_overview_with_openai(company, google_data)
+            report_path = generate_pdf_report(company, overview, news_data, gnews_data, sentiment)
 
             st.success("Report generated!")
             with open(report_path, "rb") as f:
