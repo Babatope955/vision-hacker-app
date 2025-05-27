@@ -1,60 +1,65 @@
 import streamlit as st
-import requests
+import openai
 import os
+import requests
 
-# Load API key from Streamlit Secrets
-SERPAPI_KEY = st.secrets["SERPAPI_KEY"]
+# Load secrets
+openai.api_key = st.secrets["OPENAI_API_KEY"]
+SERPAPI_API_KEY = st.secrets["SERPAPI_API_KEY"]
 
-# Search function using SerpAPI
-def search_with_serpapi(query):
-    url = "https://serpapi.com/search.json"
-    params = {
-        "q": query,
-        "engine": "google",
-        "api_key": SERPAPI_KEY
-    }
-    response = requests.get(url, params=params)
-    return response.json()
+# Streamlit UI
+st.title("🧠 Business Intelligence Tool (IDEAL Framework)")
 
-# Analysis function
-def analyze_results(results):
-    if "organic_results" not in results:
-        return "No results found or API error."
+query = st.text_input("🔍 Enter a company or founder name to analyze:")
 
-    insights = []
+# Button to trigger the analysis
+if st.button("Run Analysis") and query:
+    with st.spinner("🔄 Gathering intelligence..."):
 
-    titles = [res.get("title", "") for res in results["organic_results"]]
-    snippets = [res.get("snippet", "") for res in results["organic_results"]]
+        # SERP API search
+        serp_url = "https://serpapi.com/search"
+        params = {
+            "q": query,
+            "api_key": SERPAPI_API_KEY,
+            "num": "5"
+        }
+        serp_results = requests.get(serp_url, params=params).json()
 
-    # Basic keyword checks
-    if not any("vision" in s.lower() for s in snippets):
-        insights.append("⚠️ No clear vision or mission found in public results.")
-    if not any("contact" in s.lower() or "email" in s.lower() for s in snippets):
-        insights.append("📭 No contact information is visible — may reduce trust.")
-    if any("controversy" in s.lower() or "scandal" in s.lower() for s in snippets):
-        insights.append("🚨 Potential reputation risks found.")
+        # Extract snippets
+        snippets = []
+        if "organic_results" in serp_results:
+            for result in serp_results["organic_results"]:
+                if "snippet" in result:
+                    snippets.append(result["snippet"])
 
-    if not insights:
-        insights.append("✅ Everything looks generally clean and structured.")
+        # Format context
+        combined_snippets = "\n".join(snippets[:5])
 
-    return "\n".join(insights)
+        # Phase 2–5: AI reasoning using OpenAI
+        prompt = f"""
+You are a startup analyst using the IDEAL framework:
 
-# Streamlit app UI
-st.title("🔎 Vision Hacker Lite")
-query = st.text_input("Enter name of a company, influencer, or product to analyze:")
+Phase 1: Based on the info below, identify the company's purpose and current activities.
+Phase 2: Diagnose its public perception, gaps, competitors, and pain points.
+Phase 3: Evaluate urgency, opportunity size, and effort-to-impact ratio.
+Phase 4: Act — suggest solutions like tech upgrades, brand shifts, hiring, culture tweaks.
+Phase 5: Launch — create a compelling short pitch to send the company.
 
-if st.button("Analyze"):
-    with st.spinner("Searching..."):
-        search_data = search_with_serpapi(query)
-        st.subheader("🔍 Top Search Results")
-        if "organic_results" in search_data:
-            for i, res in enumerate(search_data["organic_results"][:5]):
-                st.markdown(f"**{i+1}. {res.get('title', '')}**")
-                st.write(res.get("snippet", ""))
-                st.write(res.get("link", ""))
-        else:
-            st.error("No results found or SerpAPI quota exceeded.")
+Company Name: {query}
+Info:
+{combined_snippets}
+"""
 
-        st.subheader("🧠 Auto Insights")
-        analysis = analyze_results(search_data)
-        st.write(analysis)
+        response = openai.ChatCompletion.create(
+            model="gpt-4",
+            messages=[
+                {"role": "system", "content": "You're an expert business analyst."},
+                {"role": "user", "content": prompt}
+            ],
+            temperature=0.7,
+            max_tokens=1200
+        )
+
+        output = response["choices"][0]["message"]["content"]
+        st.markdown("## 🔍 Analysis Output")
+        st.markdown(output)
