@@ -63,7 +63,7 @@ def generate_pdf_report(company_name, google_results, newsdata_articles, gnews_a
 
     # Overview from Google Results
     pdf.set_font("Arial", 'B', 14)
-    pdf.cell(200, 10, txt="📌 Overview:", ln=True)
+    pdf.cell(200, 10, txt="Overview:", ln=True)
     pdf.set_font("Arial", '', 12)
     if google_results:
         snippet = google_results[0].get("snippet", "No overview found.")
@@ -74,7 +74,7 @@ def generate_pdf_report(company_name, google_results, newsdata_articles, gnews_a
 
     # News from NewsData
     pdf.set_font("Arial", 'B', 14)
-    pdf.cell(200, 10, txt="📰 Recent News from NewsData.io:", ln=True)
+    pdf.cell(200, 10, txt="Recent News from NewsData.io:", ln=True)
     pdf.set_font("Arial", '', 12)
     if newsdata_articles:
         for article in newsdata_articles[:3]:
@@ -85,7 +85,7 @@ def generate_pdf_report(company_name, google_results, newsdata_articles, gnews_a
 
     pdf.ln(5)
     pdf.set_font("Arial", 'B', 14)
-    pdf.cell(200, 10, txt="📰 Recent News from GNews:", ln=True)
+    pdf.cell(200, 10, txt="Recent News from GNews:", ln=True)
     pdf.set_font("Arial", '', 12)
     if gnews_articles:
         for article in gnews_articles[:3]:
@@ -97,7 +97,7 @@ def generate_pdf_report(company_name, google_results, newsdata_articles, gnews_a
     # Mock diagnosis
     pdf.ln(5)
     pdf.set_font("Arial", 'B', 14)
-    pdf.cell(200, 10, txt="⚠️ Pain Points (Mock AI Diagnosis):", ln=True)
+    pdf.cell(200, 10, txt="Pain Points (Mock AI Diagnosis):", ln=True)
     pdf.set_font("Arial", '', 12)
     pdf.cell(200, 10, txt="- High public exposure may demand better PR handling.", ln=True)
     pdf.cell(200, 10, txt="- Competitor pressure in regional markets.", ln=True)
@@ -105,7 +105,7 @@ def generate_pdf_report(company_name, google_results, newsdata_articles, gnews_a
     # Suggestions
     pdf.ln(5)
     pdf.set_font("Arial", 'B', 14)
-    pdf.cell(200, 10, txt="💡 Suggested Actions:", ln=True)
+    pdf.cell(200, 10, txt="Suggested Actions:", ln=True)
     pdf.set_font("Arial", '', 12)
     pdf.cell(200, 10, txt="- Invest in localized branding and influencer partnerships.", ln=True)
     pdf.cell(200, 10, txt="- Boost digital engagement through targeted campaigns.", ln=True)
@@ -116,7 +116,7 @@ def generate_pdf_report(company_name, google_results, newsdata_articles, gnews_a
 # -----------------------------
 # Streamlit UI
 # -----------------------------
-st.title("🔍 Vision Hacker: Company Intelligence Tool")
+st.title("Vision Hacker: Company Intelligence Tool")
 company = st.text_input("Enter a company name to analyze:")
 
 if st.button("Run Analysis") and company:
@@ -129,6 +129,6 @@ if st.button("Run Analysis") and company:
 
             st.success(f"Report generated!")
             with open(report_path, "rb") as f:
-                st.download_button("📄 Download PDF Report", f, file_name=report_path.name)
+                st.download_button("Download PDF Report", f, file_name=report_path.name)
         except Exception as e:
             st.error(f"An error occurred: {e}")
